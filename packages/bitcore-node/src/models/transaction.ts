@@ -183,7 +183,17 @@ export class TransactionModel extends BaseModel<ITransaction> {
     mintOps: Array<MintOp>;
     mempoolTime?: Date;
   }) {
-    let { blockHash, blockTime, blockTimeNormalized, chain, height, network, parentChain, forkHeight } = params;
+    let {
+      blockHash,
+      blockTime,
+      blockTimeNormalized,
+      chain,
+      height,
+      network,
+      parentChain,
+      forkHeight,
+      mempoolTime
+    } = params;
     if (parentChain && forkHeight && height < forkHeight) {
       const parentTxs = await TransactionStorage.collection
         .find({ blockHeight: height, chain: parentChain, network })
@@ -207,7 +217,8 @@ export class TransactionModel extends BaseModel<ITransaction> {
                 inputCount: parentTx.inputCount,
                 outputCount: parentTx.outputCount,
                 value: parentTx.value,
-                wallets: []
+                wallets: [],
+                ...(mempoolTime && { mempoolTime })
               }
             },
             upsert: true,
@@ -521,7 +532,7 @@ export class TransactionModel extends BaseModel<ITransaction> {
     return this.collection.find(finalQuery, options).addCursorFlag('noCursorTimeout', true);
   }
 
-  _apiTransform(tx: Partial<MongoBound<ITransaction>>, options: TransformOptions): TransactionJSON | string {
+  _apiTransform(tx: Partial<MongoBound<ITransaction>>, options?: TransformOptions): TransactionJSON | string {
     const transaction: TransactionJSON = {
       _id: tx._id ? tx._id.toString() : '',
       txid: tx.txid || '',

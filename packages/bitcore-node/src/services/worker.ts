@@ -4,15 +4,15 @@ import { LoggifyClass } from '../decorators/Loggify';
 import logger from '../logger';
 import config from '../config';
 import parseArgv from '../utils/parseArgv';
+import { EventEmitter } from 'events';
+import cluster from 'cluster';
 
-const cluster = require('cluster');
-const { EventEmitter } = require('events');
 let args = parseArgv([], ['DEBUG']);
 
 @LoggifyClass
 export class WorkerService extends EventEmitter {
   workers = new Array<{
-    worker: WorkerType;
+    worker: cluster.Worker;
     active: boolean;
     started: Promise<any>;
   }>();
@@ -21,11 +21,13 @@ export class WorkerService extends EventEmitter {
     if (cluster.isMaster) {
       logger.verbose(`Master ${process.pid} is running`);
       cluster.on('exit', (worker: WorkerType) => {
-        logger.error(`worker ${worker.process.pid} died`);
+        logger.warn(`worker ${worker.process.pid} stopped`);
+        process.kill(process.pid);
       });
       if (!args.DEBUG) {
         for (let worker = 0; worker < config.numWorkers; worker++) {
           let newWorker = cluster.fork();
+          logger.verbose(`Starting worker number ${worker}`);
           newWorker.on('message', (msg: any) => {
             this.emit(msg.id, msg);
           });
@@ -45,7 +47,7 @@ export class WorkerService extends EventEmitter {
     }
   }
 
-  stop() {}
+  async stop() {}
 
   sendTask(task: any, argument: any, done: CallbackType) {
     var worker = this.workers.shift();

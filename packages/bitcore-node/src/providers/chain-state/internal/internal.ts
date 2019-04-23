@@ -49,21 +49,25 @@ export class InternalStateProvider implements CSP.IChainStateService {
 
   streamAddressUtxos(params: CSP.StreamAddressUtxosParams) {
     const { req, res, args } = params;
-    const { limit } = args;
+    const { limit, since } = args;
     const query = this.getAddressQuery(params);
-    Storage.apiStreamingFind(CoinStorage, query, { limit }, req, res);
+    Storage.apiStreamingFind(CoinStorage, query, { limit, since, paging: '_id' }, req, res);
   }
 
   async streamAddressTransactions(params: CSP.StreamAddressUtxosParams) {
-    const { req, res } = params;
+    const { req, res, args } = params;
+    const { limit, since } = args;
     const query = this.getAddressQuery(params);
-    Storage.apiStreamingFind(CoinStorage, query, {}, req, res);
+    Storage.apiStreamingFind(CoinStorage, query, { limit, since, paging: '_id' }, req, res);
   }
 
   async getBalanceForAddress(params: CSP.GetBalanceForAddressParams) {
     const { chain, network, address } = params;
     const query = {
-      chain, network, address, spentHeight: { $lt: SpentHeightIndicators.minimum },
+      chain,
+      network,
+      address,
+      spentHeight: { $lt: SpentHeightIndicators.minimum },
       mintHeight: { $gt: SpentHeightIndicators.conflicting }
     };
     let balance = await CoinStorage.getBalance({ query });
@@ -310,7 +314,7 @@ export class InternalStateProvider implements CSP.IChainStateService {
           }
           return done();
         },
-        function (done) {
+        function(done) {
           this.push({ allMissingAddresses, totalMissingValue });
           done();
         }
@@ -377,8 +381,8 @@ export class InternalStateProvider implements CSP.IChainStateService {
       wallets: params.wallet._id,
       'wallets.0': { $exists: true },
       spentHeight: { $lt: SpentHeightIndicators.minimum },
-      mintHeight: { $gt: SpentHeightIndicators.conflicting },
-    }
+      mintHeight: { $gt: SpentHeightIndicators.conflicting }
+    };
     return CoinStorage.getBalance({ query });
   }
 
