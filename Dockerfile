@@ -12,4 +12,4 @@ RUN npm run compile
 EXPOSE 3000
 EXPOSE 8100
 
-CMD ["node", "run", "node"]
+CMD ["npm", "run", "node"]
