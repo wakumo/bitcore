@@ -7,7 +7,7 @@ router.get('/:address/txs',  function(req, res) {
   let { address, chain, network } = req.params;
   if (chain.toLowerCase() === "bch") {
     let bch_address = bch.Address.fromString(address);
-    address = bch_address.toCashAddress().replace(/^(bchtest|bitcoincash)/, "123")
+    address = bch_address.toCashAddress().replace(/^(bchtest|bitcoincash):/, "")
   }
   let { unspent, limit = 10, since } = req.query;
   let payload = {
