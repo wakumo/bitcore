@@ -1,9 +1,14 @@
 import express = require('express');
+import bch = require("bitcore-lib-cash");
 const router = express.Router({ mergeParams: true });
 import { ChainStateProvider } from '../../providers/chain-state';
 
 router.get('/:address/txs',  function(req, res) {
   let { address, chain, network } = req.params;
+  if (chain.toLowerCase() === "bch") {
+    let bch_address = bch.Address.fromString(address);
+    address = bch_address.toCashAddress().replace(/^(bchtest|bitcoincash)/, "123")
+  }
   let { unspent, limit = 10, since } = req.query;
   let payload = {
     chain,
