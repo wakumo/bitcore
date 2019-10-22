@@ -1,4 +1,4 @@
-FROM node:carbon
+FROM node:chakracore
 WORKDIR /usr/src/app
 
 COPY . .
