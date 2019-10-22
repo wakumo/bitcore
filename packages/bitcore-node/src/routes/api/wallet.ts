@@ -4,6 +4,7 @@ import { ChainNetwork } from '../../types/ChainNetwork';
 import { IWallet } from '../../models/wallet';
 import { RequestHandler } from 'express-serve-static-core';
 import { ChainStateProvider } from '../../providers/chain-state';
+import { Validation } from 'crypto-wallet-core';
 import logger from '../../logger';
 import { MongoBound } from '../../models/base';
 const router = Router({ mergeParams: true });
@@ -36,7 +37,7 @@ const verifyRequestSignature = (params: VerificationPayload): boolean => {
   }
 };
 
-const authenticate: RequestHandler = async (req: PreAuthRequest, res: Response, next: any) => {
+const authenticate: RequestHandler = async (req: Request, res: Response, next: any) => {
   const { chain, network, pubKey } = req.params as SignedApiRequest;
   logger.debug('Authenticating request with pubKey: ', pubKey);
   let wallet;
@@ -45,19 +46,19 @@ const authenticate: RequestHandler = async (req: PreAuthRequest, res: Response, 
   } catch (err) {
     return res.status(500).send('Problem authenticating wallet');
   }
-
-  if (req.is('application/octet-stream')) {
-    req.body = JSON.parse(req.body.toString());
-  }
-  if (!wallet) {
-    return res.status(404).send('Wallet not found');
-  }
-  Object.assign(req, { wallet });
-  const walletConfig = Config.for('api').wallets;
-  if (walletConfig && walletConfig.allowUnauthenticatedCalls) {
-    return next();
-  }
   try {
+    if (req.is('application/octet-stream')) {
+      req.body = JSON.parse(req.body.toString());
+    }
+    if (!wallet) {
+      return res.status(404).send('Wallet not found');
+    }
+    Object.assign(req, { wallet });
+    const walletConfig = Config.for('api').wallets;
+    if (walletConfig && walletConfig.allowUnauthenticatedCalls) {
+      return next();
+    }
+
     const validRequestSignature = verifyRequestSignature({
       message: [req.method, req.originalUrl, JSON.stringify(req.body)].join('|'),
       pubKey: wallet.pubKey,
@@ -72,6 +73,9 @@ const authenticate: RequestHandler = async (req: PreAuthRequest, res: Response, 
   }
 };
 
+function isTooLong(field, maxLength = 255) {
+  return field && field.toString().length >= maxLength;
+}
 // create wallet
 router.post('/', async function(req, res) {
   let { chain, network } = req.params;
@@ -84,6 +88,9 @@ router.post('/', async function(req, res) {
     });
     if (existingWallet) {
       return res.status(200).send('Wallet already exists');
+    }
+    if (isTooLong(name) || isTooLong(pubKey) || isTooLong(path) || isTooLong(singleAddress)) {
+      return res.status(413).send('String length exceeds limit');
     }
     let result = await ChainStateProvider.createWallet({
       chain,
@@ -108,7 +115,7 @@ router.get('/:pubKey/addresses/missing', authenticate, async (req: Authenticated
       pubKey,
       stream: res
     };
-    return ChainStateProvider.streamMissingWalletAddresses(payload);
+    return await ChainStateProvider.streamMissingWalletAddresses(payload);
   } catch (err) {
     return res.status(500).send(err);
   }
@@ -127,7 +134,7 @@ router.get('/:pubKey/addresses', authenticate, async (req: AuthenticatedRequest,
       req,
       res
     };
-    return ChainStateProvider.streamWalletAddresses(payload);
+    return await ChainStateProvider.streamWalletAddresses(payload);
   } catch (err) {
     return res.status(500).send(err);
   }
@@ -155,6 +162,11 @@ router.post('/:pubKey', authenticate, async (req: AuthenticatedRequest, res) => 
   let keepAlive;
   try {
     let addresses = addressLines.map(({ address }) => address);
+    for (const address of addresses) {
+      if (isTooLong(address) || !Validation.validateAddress(chain, network, address)) {
+        return res.status(413).send('Invalid address');
+      }
+    }
     res.status(200);
     keepAlive = setInterval(() => {
       res.write('\n');
@@ -176,7 +188,7 @@ router.post('/:pubKey', authenticate, async (req: AuthenticatedRequest, res) => 
 router.get('/:pubKey/transactions', authenticate, async (req: AuthenticatedRequest, res) => {
   let { chain, network } = req.params;
   try {
-    return ChainStateProvider.streamWalletTransactions({
+    return await ChainStateProvider.streamWalletTransactions({
       chain,
       network,
       wallet: req.wallet!,
@@ -195,7 +207,8 @@ router.get('/:pubKey/balance', authenticate, async (req: AuthenticatedRequest, r
     const result = await ChainStateProvider.getWalletBalance({
       chain,
       network,
-      wallet: req.wallet!
+      wallet: req.wallet!,
+      args: req.query
     });
     return res.send(result || { confirmed: 0, unconfirmed: 0, balance: 0 });
   } catch (err) {
@@ -210,7 +223,8 @@ router.get('/:pubKey/balance/:time', authenticate, async (req: AuthenticatedRequ
       chain,
       network,
       wallet: req.wallet!,
-      time
+      time,
+      args: req.query
     });
     return res.send(result || { confirmed: 0, unconfirmed: 0, balance: 0 });
   } catch (err) {

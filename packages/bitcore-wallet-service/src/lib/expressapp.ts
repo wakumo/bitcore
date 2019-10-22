@@ -1,12 +1,15 @@
 import express from 'express';
 import _ from 'lodash';
+import * as log from 'npmlog';
+import 'source-map-support/register';
+
 import { ClientError } from './errors/clienterror';
 import { WalletService } from './server';
 import { Stats } from './stats';
-import * as log from 'npmlog';
 
 const bodyParser = require('body-parser');
 const compression = require('compression');
+const config = require('../config');
 const RateLimit = require('express-rate-limit');
 const Common = require('./common');
 const Defaults = Common.Defaults;
@@ -27,6 +30,7 @@ export class ExpressApp {
    * @param opts.WalletService options for WalletService class
    * @param opts.basePath
    * @param opts.disableLogs
+   * @param opts.doNotCheckV8
    * @param {Callback} cb
    */
   start(opts, cb) {
@@ -73,6 +77,17 @@ export class ExpressApp {
         limit: POST_LIMIT
       })
     );
+
+    this.app.use((req, res, next) => {
+      if (config.maintenanceOpts.maintenanceMode === true) {
+        // send a 503 error, with a message to the bitpay status page
+        let errorCode = 503;
+        let errorMessage = 'BWS down for maintenance';
+        res.status(503).send({code: errorCode, message: errorMessage});
+      } else {
+        next();
+      }
+    });
 
     if (opts.disableLogs) {
       log.level = 'silent';
@@ -573,6 +588,15 @@ export class ExpressApp {
       });
     });
 
+    router.post('/v3/estimateGas/', (req, res) => {
+      getServerWithAuth(req, res, (server) => {
+        server.estimateGas(req.body, (err, gasLimit) => {
+          if (err) return returnError(err, res, req);
+          res.json(gasLimit);
+        });
+      });
+    });
+
     router.get('/v1/sendmaxinfo/', (req, res) => {
       getServerWithAuth(req, res, (server) => {
         const q = req.query;
@@ -840,8 +864,8 @@ export class ExpressApp {
       let server;
       const opts = {
         code: req.params['code'],
-        provider: req.query.provider,
-        ts: +req.query.ts
+        coin: req.query.coin || 'btc',
+        ts: (req.query.ts ? +req.query.ts : null),
       };
       try {
         server = getServer(req, res);

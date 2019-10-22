@@ -15,6 +15,7 @@ export class ApiService {
   storageService: StorageService;
   socketService: SocketService;
   httpServer: http.Server;
+  app: typeof app;
   stopped = true;
 
   constructor({
@@ -29,6 +30,7 @@ export class ApiService {
     this.configService = configService;
     this.storageService = storageService;
     this.socketService = socketService;
+    this.app = app;
     this.httpServer = new http.Server(app);
   }
 
@@ -54,7 +56,11 @@ export class ApiService {
   stop() {
     this.stopped = true;
     return new Promise(resolve => {
-      this.httpServer.close(resolve);
+      this.httpServer.close(() => {
+        logger.info("Stopped API Service")
+        resolve();
+      });
+      this.httpServer.emit('close');
     });
   }
 }

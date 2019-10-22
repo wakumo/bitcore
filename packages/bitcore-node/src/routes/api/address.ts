@@ -3,7 +3,7 @@ import bch = require("bitcore-lib-cash");
 const router = express.Router({ mergeParams: true });
 import { ChainStateProvider } from '../../providers/chain-state';
 
-router.get('/:address/txs',  function(req, res) {
+router.get('/:address/txs', function(req, res) {
   let { address, chain, network } = req.params;
 
   if (chain.toLowerCase() === "bch") {
@@ -18,12 +18,12 @@ router.get('/:address/txs',  function(req, res) {
     address,
     req,
     res,
-    args: { unspent, limit, since }
+    args: { ...req.query, unspent, limit, since }
   };
   ChainStateProvider.streamAddressTransactions(payload);
 });
 
-router.get('/:address',  function(req, res) {
+router.get('/:address', function(req, res) {
   let { address, chain, network } = req.params;
   let { unspent, limit = 10, since } = req.query;
 
@@ -43,7 +43,7 @@ router.get('/:address',  function(req, res) {
   ChainStateProvider.streamAddressUtxos(payload);
 });
 
-router.get('/:address/balance',  async function(req, res) {
+router.get('/:address/balance', async function(req, res) {
   let { address, chain, network } = req.params;
 
   if (chain.toLowerCase() === "bch") {
@@ -55,7 +55,8 @@ router.get('/:address/balance',  async function(req, res) {
     let result = await ChainStateProvider.getBalanceForAddress({
       chain,
       network,
-      address
+      address,
+      args: req.query
     });
     return res.send(result || { confirmed: 0, unconfirmed: 0, balance: 0 });
   } catch (err) {

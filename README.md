@@ -1,4 +1,5 @@
 # Bitcore
+![Circle CI](https://circleci.com/gh/bitpay/bitcore/tree/master.svg?style=shield)
 
 **Infrastructure to build Bitcoin and blockchain-based applications for the next generation of financial technology.**
 
@@ -155,7 +156,7 @@ npm run node
 - [Bitcore Wallet Client](packages/bitcore-wallet-client) - A client for the wallet service
 - [Bitcore Wallet Service](packages/bitcore-wallet-service) - A multisig HD service for wallets
 - [Bitpay Wallet](https://github.com/bitpay/copay) - An easy-to-use, multiplatform, multisignature, secure bitcoin wallet
-- [Insight](packages/insight-previous) - A blockchain explorer web user interface
+- [Insight](packages/insight) - A blockchain explorer web user interface
 
 ## Libraries
 

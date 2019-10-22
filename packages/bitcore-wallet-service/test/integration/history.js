@@ -8,7 +8,6 @@ var sinon = require('sinon');
 var should = chai.should();
 var log = require('npmlog');
 log.debug = log.verbose;
-log.level = 'info';
 
 var Bitcore = require('bitcore-lib');
 var Bitcore_ = {
@@ -31,7 +30,7 @@ var helpers = require('./helpers');
 var storage, blockchainExplorer, request;
 
 
-describe('History V8', function() {
+describe('History', function() {
   before(function(done) {
     helpers.before((res) => {
       done();
@@ -40,6 +39,7 @@ describe('History V8', function() {
 
 
   beforeEach(function(done) {
+    log.level = 'error';
     helpers.beforeEach(function(res) {
       storage = res.storage;
       blockchainExplorer = res.blockchainExplorer;
@@ -73,7 +73,7 @@ describe('History V8', function() {
 
 
 
-  describe('#getTxHistoryV8', function() {
+  describe('#getTxHistory', function() {
     var server, wallet, mainAddresses, changeAddresses;
     beforeEach(function(done) {
       blockchainExplorer.getBlockchainHeight = sinon.stub().callsArgWith(0, null, BCHEIGHT, 'hash');
@@ -92,7 +92,7 @@ describe('History V8', function() {
     });
 
     it('should get tx history from insight, 20 items', function(done) {
-      helpers.stubHistoryV8(50, BCHEIGHT);
+      helpers.stubHistory(50, BCHEIGHT);
       server.getTxHistory({limit: 20}, function(err, txs, fromCache) {
         should.not.exist(err);
         fromCache.should.equal(false);
@@ -120,7 +120,8 @@ describe('History V8', function() {
       txs[5].satoshis=100;
       txs[15].satoshis=10;
       txs[25].satoshis=1;
-      helpers.stubHistoryV8(null, null, txs);
+
+      helpers.stubHistory(null, null, txs);
       server.getTxHistory({limit: 50}, function(err, txs, fromCache) {
         should.not.exist(err);
         fromCache.should.equal(false);
@@ -129,6 +130,75 @@ describe('History V8', function() {
         done();
       });
     });
+
+    it('should handle 2 incoming payments on the same txs, 2 different addr', function(done) {
+     let txs= helpers.createTxsV8(3, BCHEIGHT);
+      txs[1].address=txs[0].address;
+      txs[1].txid=txs[0].txid;
+      txs[1].id=txs[0].id;
+      txs[1].satoshis = 10000;
+      txs[1].address='other address';
+ 
+      helpers.stubHistory(null, null, txs);
+      server.getTxHistory({limit: 50}, function(err, txs, fromCache) {
+        should.not.exist(err);
+        fromCache.should.equal(false);
+        should.exist(txs);
+        txs.length.should.equal(2);
+        // one tx from 2 items
+        txs[0].amount.should.equal(40001);
+
+
+        txs[0].outputs.should.deep.equal([
+          {
+            "address": "muFJi3ZPfR5nhxyD7dfpx2nYZA8Wmwzgck",
+            "amount": 30001,
+          },
+          {
+            "address": "other address",
+              "amount": 10000,
+          }]);
+
+        txs[0].txid.should.equal('txid0');
+
+        txs[1].amount.should.equal(30001);
+        done();
+      });
+    });
+
+
+    it('should handle 2 incoming payments on the same txs, 2 different addr, one dust', function(done) {
+     let txs= helpers.createTxsV8(3, BCHEIGHT);
+      txs[1].address=txs[0].address;
+      txs[1].txid=txs[0].txid;
+      txs[1].id=txs[0].id;
+      txs[1].satoshis = 100;
+      txs[1].address='other address';
+ 
+      helpers.stubHistory(null, null, txs);
+      server.getTxHistory({limit: 50}, function(err, txs, fromCache) {
+        should.not.exist(err);
+        fromCache.should.equal(false);
+        should.exist(txs);
+        txs.length.should.equal(2);
+        // one tx from 2 items
+        txs[0].amount.should.equal(30001);
+
+
+        txs[0].outputs.should.deep.equal([
+          {
+            "address": "muFJi3ZPfR5nhxyD7dfpx2nYZA8Wmwzgck",
+            "amount": 30001,
+          },
+          ]);
+
+        txs[0].txid.should.equal('txid0');
+
+        txs[1].amount.should.equal(30001);
+        done();
+      });
+    });
+
 
 
 
@@ -143,7 +213,7 @@ describe('History V8', function() {
         txs[1].address =main[0].address;
         txs[0].category=txs[1].category='move';
 
-        helpers.stubHistoryV8(null, null, txs);
+        helpers.stubHistory(null, null, txs);
 
         server.getTxHistory({limit: 10}, function(err, txs, fromCache) {
           should.not.exist(err);
@@ -175,7 +245,7 @@ describe('History V8', function() {
         txs[1].address =change[0].address;
         txs[0].category=txs[1].category='move';
 
-        helpers.stubHistoryV8(null, null, txs);
+        helpers.stubHistory(null, null, txs);
 
         server.getTxHistory({limit: 10}, function(err, txs, fromCache) {
           should.not.exist(err);
@@ -210,7 +280,7 @@ describe('History V8', function() {
         txs[2].address =change[0].address;
         txs[3].address =main[1].address;
 
-        helpers.stubHistoryV8(null, null, txs);
+        helpers.stubHistory(null, null, txs);
 
         server.getTxHistory({limit: 10}, function(err, txs, fromCache) {
           should.not.exist(err);
@@ -240,7 +310,7 @@ describe('History V8', function() {
     it('should get tx history from cache', function(done) {
       var _cache = Defaults.CONFIRMATIONS_TO_START_CACHING;
       Defaults.CONFIRMATIONS_TO_START_CACHING = 10;
-      helpers.stubHistoryV8(50, BCHEIGHT); //(0->49)
+      helpers.stubHistory(50, BCHEIGHT); //(0->49)
 
       // this call is to fill the cache
       server.getTxHistory({limit: 20}, function(err, txs, fromCache) {
@@ -276,7 +346,7 @@ describe('History V8', function() {
     it('should get tx history from cache and bc mixed', function(done) {
       var _cache = Defaults.CONFIRMATIONS_TO_START_CACHING;
       Defaults.CONFIRMATIONS_TO_START_CACHING = 10;
-      helpers.stubHistoryV8(50, BCHEIGHT); //(0->49)
+      helpers.stubHistory(50, BCHEIGHT); //(0->49)
 
       // this call is to fill the cache
       server.getTxHistory({limit: 20}, function(err, txs, fromCache) {
@@ -315,7 +385,7 @@ describe('History V8', function() {
 
       // remove bc tip cache.
       Defaults.BLOCKHEIGHT_CACHE_TIME = 0;
-      helpers.stubHistoryV8(50, BCHEIGHT); //(0->49)
+      helpers.stubHistory(50, BCHEIGHT); //(0->49)
 
       // this call is to fill the cache
       server.getTxHistory({limit: 20}, function(err, txs, fromCache) {
@@ -345,7 +415,7 @@ describe('History V8', function() {
         this.timeout(10000);
         var _cache = Defaults.CONFIRMATIONS_TO_START_CACHING;
         Defaults.CONFIRMATIONS_TO_START_CACHING = 10;
-        helpers.stubHistoryV8(100, 10000);
+        helpers.stubHistory(100, 10000);
         let limit =20;
         let allTxs = [];
 
@@ -404,7 +474,7 @@ describe('History V8', function() {
         this.timeout(10000);
         var _cache = Defaults.CONFIRMATIONS_TO_START_CACHING;
         Defaults.CONFIRMATIONS_TO_START_CACHING = 10;
-        helpers.stubHistoryV8(1000, 10000); //(0->49)
+        helpers.stubHistory(1000, 10000); //(0->49)
         let limit =20;
         let allTxs = [];
 
@@ -457,7 +527,7 @@ describe('History V8', function() {
         this.timeout(10000);
         var _cache = Defaults.CONFIRMATIONS_TO_START_CACHING;
         Defaults.CONFIRMATIONS_TO_START_CACHING = 10;
-        helpers.stubHistoryV8(997, 10000); //(0->49)
+        helpers.stubHistory(997, 10000); //(0->49)
         let limit =17;
         let allTxs = [];
 
@@ -511,7 +581,7 @@ describe('History V8', function() {
         this.timeout(10000);
         var _cache = Defaults.CONFIRMATIONS_TO_START_CACHING;
         Defaults.CONFIRMATIONS_TO_START_CACHING = 100;
-        helpers.stubHistoryV8(997, 10000); //(0->49)
+        helpers.stubHistory(997, 10000); //(0->49)
         let limit =17;
         let allTxs = [];
 
@@ -566,7 +636,7 @@ describe('History V8', function() {
 
 
     it('should get tx history from insight, in 2 overlapping pages', function(done) {
-      helpers.stubHistoryV8(300, BCHEIGHT);
+      helpers.stubHistory(300, BCHEIGHT);
       server.getTxHistory({limit: 25}, function(err, txs, fromCache) {
         should.not.exist(err);
         fromCache.should.equal(false);
@@ -656,7 +726,7 @@ describe('History V8', function() {
                },
               ];
 
-              helpers.stubHistoryV8(null, null,txs);
+              helpers.stubHistory(null, null,txs);
               helpers.stubCheckData(blockchainExplorer, server, wallet.coin == 'bch', () =>{
 
               server.getTxHistory({
@@ -754,7 +824,7 @@ describe('History V8', function() {
                },
               ];
 
-              helpers.stubHistoryV8(null, null,txs);
+              helpers.stubHistory(null, null,txs);
               helpers.stubCheckData(blockchainExplorer, server, wallet.coin == 'bch', () =>{
 
               server.getTxHistory({}, function(err, txs) {
@@ -860,7 +930,7 @@ describe('History V8', function() {
           }],
         };
       });
-      helpers.stubHistoryV8(txs);
+      helpers.stubHistory(txs);
 
       async.each(testCases, function(testCase, next) {
         server.getTxHistory(testCase.opts, function(err, txs) {
@@ -884,7 +954,7 @@ describe('History V8', function() {
       h.push({
         txid: 'xx'
       })
-      helpers.stubHistoryV8(h, BCHEIGHT);
+      helpers.stubHistory(h, BCHEIGHT);
       var l = TestData.history.length;
 
       server.getTxHistory({}, function(err, txs) {
@@ -950,7 +1020,7 @@ describe('History V8', function() {
         }],
         size: 500,
       }];
-      helpers.stubHistoryV8(txs, BCHEIGHT);
+      helpers.stubHistory(txs, BCHEIGHT);
       server.getTxHistory({}, function(err, txs) {
         should.not.exist(err);
         var tx = txs[0];
@@ -982,7 +1052,7 @@ describe('History V8', function() {
         }],
         size: 500,
       }];
-      helpers.stubHistoryV8(txs);
+      helpers.stubHistory(txs);
       server.getTxHistory({}, function(err, txs) {
         should.not.exist(err);
         var tx = txs[0];
@@ -996,7 +1066,7 @@ describe('History V8', function() {
     it.skip('should handle outgoing txs where fee > amount', function(done) {
       var x = _.cloneDeep([HugeTxs[0]]);
       x[0].vin[118].addr = mainAddresses[0].address;
-      helpers.stubHistoryV8(x);
+      helpers.stubHistory(x);
 
 
       server.getTxHistory({}, function(err, txs) {
@@ -1019,7 +1089,7 @@ describe('History V8', function() {
       var x = _.cloneDeep([HugeTxs[1]]);
 
       x[0].vout[43].scriptPubKey.addresses = [mainAddresses[0].address];
-      helpers.stubHistoryV8(x);
+      helpers.stubHistory(x);
 
       server.getTxHistory({}, function(err, txs) {
         should.not.exist(err);
@@ -1040,7 +1110,7 @@ describe('History V8', function() {
       beforeEach(function(done) {
         blockchainExplorer.getBlockchainHeight = sinon.stub().callsArgWith(0, null, 1000, 'hash');
         h = helpers.historyCacheTest(200);
-        helpers.stubHistoryV8(h, BCHEIGHT);
+        helpers.stubHistory(h, BCHEIGHT);
         server.storage.clearTxHistoryCache(server.walletId, function() {
           done();
         });

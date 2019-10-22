@@ -12,7 +12,8 @@ const BCHAddressTranslator = require('../bchaddresstranslator');
 const Bitcore = require('bitcore-lib');
 const Bitcore_ = {
   btc: Bitcore,
-  bch: require('bitcore-lib-cash')
+  bch: require('bitcore-lib-cash'),
+  eth: Bitcore
 };
 const config = require('../../config');
 const Constants = Common.Constants,
@@ -72,46 +73,6 @@ export class V8 {
     //
     this.request = opts.request || request;
     this.Client = opts.client || Client || require('./v8/client');
-  }
-
-  // Translate Request Address query
-  translateQueryAddresses(addresses) {
-    if (!this.addressFormat) return addresses;
-
-    return BCHAddressTranslator.translate(
-      addresses,
-      this.addressFormat,
-      'copay'
-    );
-  }
-
-  // Translate Result Address
-  translateResultAddresses(addresses) {
-    if (!this.addressFormat) return addresses;
-
-    return BCHAddressTranslator.translate(
-      addresses,
-      'copay',
-      this.addressFormat
-    );
-  }
-
-  translateTx(tx) {
-    if (!this.addressFormat) return tx;
-
-    _.each(tx.vin, (x) => {
-      if (x.addr) {
-        x.addr = this.translateResultAddresses(x.addr);
-      }
-    });
-
-    _.each(tx.vout, (x) => {
-      if (x.scriptPubKey && x.scriptPubKey.addresses) {
-        x.scriptPubKey.addresses = this.translateResultAddresses(
-          x.scriptPubKey.addresses
-        );
-      }
-    });
   }
 
   _getClient() {
@@ -205,7 +166,7 @@ export class V8 {
           txid: x.mintTxid,
           vout: x.mintIndex,
           locked: false,
-          confirmations: x.mintHeight > 0 ? bcheight - x.mintHeight + 1 : 0
+          confirmations: x.mintHeight > 0 && bcheight >= x.mintHeight ? bcheight - x.mintHeight + 1 : 0
         };
 
         // v8 field name differences
@@ -395,6 +356,34 @@ export class V8 {
       });
   }
 
+  getTransactionCount(address, cb) {
+    const url = this.baseUrl + '/address/' + address + '/txs/count';
+    console.log('[v8.js.364:url:] CHECKING ADDRESS NONCE', url);
+    this.request
+      .get(url, {})
+      .then(ret => {
+        ret = JSON.parse(ret);
+        return cb(null, ret.nonce);
+      })
+      .catch(err => {
+        return cb(err);
+      });
+  }
+
+  estimateGas(opts, cb) {
+    const url = this.baseUrl + '/fee/gas';
+    console.log('[v8.js.378:url:] CHECKING GAS LIMIT', url);
+    this.request
+      .post(url, { body: opts, json: true })
+      .then(gasLimit => {
+        gasLimit = JSON.parse(gasLimit);
+        return cb(null, gasLimit);
+      })
+      .catch(err => {
+        return cb(err);
+      });
+  }
+
   estimateFee(nbBlocks, cb) {
     nbBlocks = nbBlocks || [1, 2, 6, 24];
     const result = {};
@@ -415,7 +404,7 @@ export class V8 {
                 return icb();
               }
 
-              result[x] = ret.feerate;
+              result[x] = ret.feerate ? ret.feerate : ret;
             } catch (e) {
               log.warn('fee error:', e);
             }
@@ -487,7 +476,6 @@ export class V8 {
     socket.on('connect_error', () => {
       log.error('Error connecting to ' + this.getConnectionInfo());
     });
-    socket.on('tx', callbacks.onTx);
     socket.on('block', (data) => {
       return callbacks.onBlock(data.hash);
     });
@@ -496,19 +484,15 @@ export class V8 {
       if (!data.address) return;
       let out;
       try {
-        const addr =
-          this.coin == 'bch'
-            ? BCHAddressTranslator.translate(data.address, 'copay', 'cashaddr')
-            : data.address;
         out = {
-          address: addr,
-          amount: data.value / 1e8
+          address: data.address,
+          amount: data.value
         };
       } catch (e) {
         // non parsable address
         return;
       }
-      return callbacks.onIncomingPayments({ outs: [out], txid: data.mintTxid });
+      return callbacks.onIncomingPayments({ out, txid: data.mintTxid });
     });
 
     return socket;

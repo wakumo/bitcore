@@ -2,10 +2,10 @@ import * as Bcrypt from 'bcryptjs';
 import { Encryption } from './encryption';
 import { Client } from './client';
 import { Storage } from './storage';
-import TxProvider from './providers/tx-provider';
-import { AddressProvider } from './providers/address-provider/deriver';
+import { Transactions, Deriver } from 'crypto-wallet-core';
 const { PrivateKey } = require('bitcore-lib');
 const Mnemonic = require('bitcore-mnemonic');
+const { ParseApiStream } = require('./stream-util');
 
 export namespace Wallet {
   export type KeyImport = {
@@ -72,7 +72,7 @@ export class Wallet {
     const mnemonic = new Mnemonic(phrase);
     const hdPrivKey = mnemonic
       .toHDPrivateKey()
-      .derive(AddressProvider.pathFor(chain, network));
+      .derive(Deriver.pathFor(chain, network));
     const privKeyObj = hdPrivKey.toObject();
 
     // Generate authentication keys
@@ -262,7 +262,7 @@ export class Wallet {
       wallet: this,
       utxos: params.utxos
     };
-    return TxProvider.create(payload);
+    return Transactions.create(payload);
   }
 
   async broadcast(params: { tx: string }) {
@@ -295,16 +295,40 @@ export class Wallet {
   }
 
   async signTx(params) {
-    let { tx, from } = params;
+    let { tx, keys, utxos, passphrase } = params;
+    if (!utxos) {
+      utxos = [];
+      await (new Promise((resolve, reject) => {
+        this.getUtxos().pipe(new ParseApiStream())
+          .on('data', (utxo) => utxos.push(utxo))
+          .on('end', () => resolve())
+          .on('err', (err) => reject(err));
+      }));
+    }
+    const addresses = [];
+    let decryptedKeys;
+    if (!keys) {
+      for (let utxo of utxos) {
+        addresses.push(utxo.address);
+      }
+      decryptedKeys = await this.storage.getKeys({addresses, name: this.name, encryptionKey: this.unlocked.encryptionKey});
+    } else {
+      addresses.push(keys[0]);
+      utxos.forEach(function(element) {
+        let keyToDecrypt = keys.find(key => key.address === element.address);
+        addresses.push(keyToDecrypt);
+      });
+      let decryptedParams = Encryption.bitcoinCoreDecrypt(addresses, passphrase);
+      decryptedKeys = [...decryptedParams.jsonlDecrypted];
+    }
     const payload = {
       chain: this.chain,
       network: this.network,
       tx,
-      utxos: params.utxos,
-      from
+      keys: decryptedKeys,
+      utxos
     };
-
-    return TxProvider.sign({ ...payload, wallet: this });
+    return Transactions.sign({ ...payload });
   }
 
   async checkWallet() {
@@ -320,7 +344,7 @@ export class Wallet {
   }
 
   async deriveAddress(addressIndex, isChange) {
-    const address = AddressProvider.derive(
+    const address = Deriver.deriveAddress(
       this.chain,
       this.network,
       this.xPubKey,
@@ -331,7 +355,7 @@ export class Wallet {
   }
 
   async derivePrivateKey(isChange) {
-    const keyToImport = await AddressProvider.derivePrivateKey(
+    const keyToImport = await Deriver.derivePrivateKey(
       this.chain,
       this.network,
       this.unlocked.masterKey,

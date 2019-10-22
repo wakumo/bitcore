@@ -13,7 +13,8 @@ const Constants = Common.Constants,
   Utils = Common.Utils;
 const Bitcore = {
   btc: require('bitcore-lib'),
-  bch: require('bitcore-lib-cash')
+  bch: require('bitcore-lib-cash'),
+  eth: require('bitcore-lib')
 };
 
 export interface IWallet {
@@ -40,6 +41,7 @@ export interface IWallet {
   beAuthPublicKey2: string;
   nativeCashAddr: boolean;
   isTestnet?: boolean;
+  usePurpose48?: boolean;
 }
 
 export class Wallet {
@@ -66,6 +68,7 @@ export class Wallet {
   beAuthPublicKey2: string;
   nativeCashAddr: boolean;
   isTestnet?: boolean;
+  usePurpose48?: boolean;
 
   scanning: boolean;
   static COPAYER_PAIR_LIMITS = {};
@@ -103,6 +106,8 @@ export class Wallet {
     x.addressManager = AddressManager.create({
       derivationStrategy: x.derivationStrategy
     });
+    x.usePurpose48  = opts.usePurpose48;
+
     x.scanStatus = null;
 
     // v8 related
@@ -154,6 +159,7 @@ export class Wallet {
     x.beAuthPublicKey2 = obj.beAuthPublicKey2;
 
     x.nativeCashAddr = obj.nativeCashAddr;
+    x.usePurpose48 = obj.usePurpose48;
 
     return x;
   }
@@ -180,6 +186,10 @@ export class Wallet {
 
   isShared() {
     return this.n > 1;
+  }
+
+  isUTXOCoin() {
+    return !!Constants.UTXO_COINS[this.coin.toUpperCase()];
   }
 
   updateBEKeys() {
