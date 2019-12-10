@@ -50,7 +50,7 @@ function setTrustedPeers(config: ConfigType): ConfigType {
   }
   return config;
 }
-const Config = function(): ConfigType {
+const Config = function (): ConfigType {
   let config: ConfigType = {
     maxPoolSize: 50,
     port: 3000,
@@ -66,7 +66,7 @@ const Config = function(): ConfigType {
     services: {
       api: {
         rateLimiter: {
-          disabled: false,
+          disabled: true,
           whitelist: ['::ffff:127.0.0.1', '::1']
         },
         wallets: {
