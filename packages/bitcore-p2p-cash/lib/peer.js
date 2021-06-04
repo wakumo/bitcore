@@ -222,7 +222,10 @@ Peer.prototype._readMessage = function () {
       this.emit(message.command, message);
       this._readMessage();
     }
-  } catch(ex) {
+  } catch (ex) {
+    // if an error happens when trying to parse buffer
+    // we catch it and log to console and not do anything else
+    // so as not to crash the whole app
     console.log(ex);
   }
 };
